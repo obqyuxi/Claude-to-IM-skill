@@ -5,6 +5,9 @@ import crypto from 'node:crypto';
 import type { BaseChannelAdapter } from 'claude-to-im/src/lib/bridge/channel-adapter.js';
 import { deliver } from 'claude-to-im/src/lib/bridge/delivery-layer.js';
 import { CTI_HOME } from './config.js';
+import type { ChannelType } from './constants.js';
+import { MOBILE_COMMAND_TIMEOUT_MS } from './constants.js';
+import { ensureDir, readJson, writeJson } from './utils/file-io.js';
 import type {
   JsonFileStore,
   RuntimeSessionBinding,
@@ -14,14 +17,13 @@ const RUNTIME_DIR = path.join(CTI_HOME, 'runtime');
 const MOBILE_ROOT = path.join(RUNTIME_DIR, 'mobile-commands');
 const MOBILE_PENDING_DIR = path.join(MOBILE_ROOT, 'pending');
 const MOBILE_RESULTS_DIR = path.join(MOBILE_ROOT, 'results');
-const MOBILE_COMMAND_TIMEOUT_MS = 15_000;
 const MOBILE_CONFIRMATION_SKIP_CHANNELS = new Set(['qq']);
 const BRIDGE_MANAGER_GLOBAL_KEY = '__bridge_manager__';
 
 export interface MobileCandidate {
   index: number;
   ref: string;
-  channelType: string;
+  channelType: ChannelType;
   chatId: string;
   codepilotSessionId: string;
   active: boolean;
@@ -41,7 +43,7 @@ export interface MobileConnectCommand {
   workingDirectory: string;
   model: string;
   target: {
-    channelType: string;
+    channelType: ChannelType;
     chatId: string;
   };
   force: boolean;
@@ -54,7 +56,7 @@ export interface MobileConnectResult {
   message: string;
   target: {
     ref: string;
-    channelType: string;
+    channelType: ChannelType;
     chatId: string;
   };
   session?: {
@@ -75,40 +77,22 @@ export interface MobileConnectResult {
   };
 }
 
-function ensureDir(dir: string): void {
-  fs.mkdirSync(dir, { recursive: true });
-}
-
 function now(): string {
   return new Date().toISOString();
-}
-
-function atomicWriteJson(filePath: string, data: unknown): void {
-  const tmpPath = `${filePath}.tmp`;
-  fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf-8');
-  fs.renameSync(tmpPath, filePath);
-}
-
-function readJson<T>(filePath: string, fallback: T): T {
-  try {
-    return JSON.parse(fs.readFileSync(filePath, 'utf-8')) as T;
-  } catch {
-    return fallback;
-  }
 }
 
 function shortSession(sessionId: string): string {
   return sessionId.slice(0, 8);
 }
 
-function getLiveAdapter(channelType: string): BaseChannelAdapter | null {
+function getLiveAdapter(channelType: ChannelType): BaseChannelAdapter | null {
   const state = (globalThis as Record<string, unknown>)[BRIDGE_MANAGER_GLOBAL_KEY] as
     | { adapters?: Map<string, BaseChannelAdapter> }
     | undefined;
   return state?.adapters?.get(channelType) ?? null;
 }
 
-function buildTargetRef(channelType: string, chatId: string): string {
+function buildTargetRef(channelType: ChannelType, chatId: string): string {
   return `${channelType}:${chatId}`;
 }
 
@@ -166,7 +150,7 @@ function ensureRuntimeLinkedSession(
 }
 
 async function maybeSendConfirmation(
-  channelType: string,
+  channelType: ChannelType,
   chatId: string,
   sessionId: string,
 ): Promise<NonNullable<MobileConnectResult['confirmation']>> {
@@ -338,7 +322,7 @@ async function processMobileCommand(
   }
 
   ensureMobileCommandDirs();
-  atomicWriteJson(path.join(MOBILE_RESULTS_DIR, `${command.id}.json`), result);
+  writeJson(path.join(MOBILE_RESULTS_DIR, `${command.id}.json`), result);
   fs.rmSync(commandPath, { force: true });
 }
 
@@ -386,7 +370,7 @@ export function enqueueMobileConnectCommand(
     type: 'connect',
     createdAt: now(),
   };
-  atomicWriteJson(path.join(MOBILE_PENDING_DIR, `${id}.json`), record);
+  writeJson(path.join(MOBILE_PENDING_DIR, `${id}.json`), record);
   return id;
 }
 

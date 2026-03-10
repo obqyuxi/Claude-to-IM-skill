@@ -249,3 +249,22 @@ When enabled, images sent by users in QQ private chat will be forwarded to the A
 ### Max Image Size MB (optional)
 
 Default: `20`. Maximum image file size in MB that will be forwarded to the AI agent. Images larger than this limit are ignored.
+
+---
+
+## Advanced Environment Variables
+
+### `CTI_ENV_ISOLATION`
+
+Controls how environment variables are passed to the Claude/Codex subprocess.
+
+- `strict` (default) — Only passes a whitelist of essential variables (PATH, HOME, etc.) plus `CTI_*` prefixed variables. `ANTHROPIC_*` variables are only passed when `CTI_ANTHROPIC_PASSTHROUGH=true`.
+- `inherit` — Passes all parent environment variables except `CLAUDECODE`.
+
+Use `inherit` if the subprocess needs access to custom environment variables not covered by the whitelist.
+
+### `CTI_CODEX_SKIP_GIT_REPO_CHECK`
+
+Default: `false`. Set to `true` to allow Codex to run in a non-git working directory.
+
+When using Codex runtime, the SDK normally requires the working directory to be inside a git repository. Enable this option if your project directory is not git-initialized.

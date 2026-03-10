@@ -8,7 +8,9 @@ set -euo pipefail
 SKILL_NAME="claude-to-im"
 CODEX_SKILLS_DIR="$HOME/.codex/skills"
 TARGET_DIR="$CODEX_SKILLS_DIR/$SKILL_NAME"
-SOURCE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=lib/common.sh
+source "$(dirname "$0")/lib/common.sh"
+SOURCE_DIR="$(resolve_skill_dir)"
 
 echo "Installing $SKILL_NAME skill for Codex..."
 

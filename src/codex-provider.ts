@@ -17,15 +17,7 @@ import path from 'node:path';
 import type { LLMProvider, StreamChatParams } from 'claude-to-im/src/lib/bridge/host.js';
 import type { PendingPermissions } from './permission-gateway.js';
 import { sseEvent } from './sse-utils.js';
-
-/** MIME → file extension for temp image files. */
-const MIME_EXT: Record<string, string> = {
-  'image/png': '.png',
-  'image/jpeg': '.jpg',
-  'image/jpg': '.jpg',
-  'image/gif': '.gif',
-  'image/webp': '.webp',
-};
+import { MIME_TO_EXT } from './utils/mime-types.js';
 
 // All SDK types kept as `any` because @openai/codex-sdk is optional.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -62,6 +54,35 @@ function shouldSkipGitRepoCheck(): boolean {
 
 function looksLikeClaudeModel(model?: string): boolean {
   return !!model && /^claude[-_]/i.test(model);
+}
+
+/**
+ * Build Codex SDK input from prompt text and optional image attachments.
+ * Images are written to temp files (Codex SDK expects local_image paths).
+ * Returns the input and a list of temp file paths for cleanup.
+ */
+function buildCodexInput(
+  prompt: string,
+  files?: Array<{ type: string; data: string }>,
+): { input: string | Array<Record<string, string>>; tempFiles: string[] } {
+  const tempFiles: string[] = [];
+  const imageFiles = files?.filter(f => f.type.startsWith('image/')) ?? [];
+
+  if (imageFiles.length === 0) {
+    return { input: prompt, tempFiles };
+  }
+
+  const parts: Array<Record<string, string>> = [
+    { type: 'text', text: prompt },
+  ];
+  for (const file of imageFiles) {
+    const ext = MIME_TO_EXT[file.type] || '.png';
+    const tmpPath = path.join(os.tmpdir(), `cti-img-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
+    fs.writeFileSync(tmpPath, Buffer.from(file.data, 'base64'));
+    tempFiles.push(tmpPath);
+    parts.push({ type: 'local_image', path: tmpPath });
+  }
+  return { input: parts, tempFiles };
 }
 
 function shouldRetryFreshThread(message: string): boolean {
@@ -121,7 +142,7 @@ export class CodexProvider implements LLMProvider {
     return new ReadableStream<string>({
       start(controller) {
         (async () => {
-          const tempFiles: string[] = [];
+          const { input, tempFiles } = buildCodexInput(params.prompt, params.files);
           try {
             const { codex } = await self.ensureSDK();
 
@@ -148,30 +169,6 @@ export class CodexProvider implements LLMProvider {
               ...(skipGitRepoCheck ? { skipGitRepoCheck: true } : {}),
               approvalPolicy,
             };
-
-            // Build input: Codex SDK UserInput supports { type: "text" } and
-            // { type: "local_image", path: string }. We write base64 data to
-            // temp files so the SDK can read them as local images.
-            const imageFiles = params.files?.filter(
-              f => f.type.startsWith('image/')
-            ) ?? [];
-
-            let input: string | Array<Record<string, string>>;
-            if (imageFiles.length > 0) {
-              const parts: Array<Record<string, string>> = [
-                { type: 'text', text: params.prompt },
-              ];
-              for (const file of imageFiles) {
-                const ext = MIME_EXT[file.type] || '.png';
-                const tmpPath = path.join(os.tmpdir(), `cti-img-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
-                fs.writeFileSync(tmpPath, Buffer.from(file.data, 'base64'));
-                tempFiles.push(tmpPath);
-                parts.push({ type: 'local_image', path: tmpPath });
-              }
-              input = parts;
-            } else {
-              input = params.prompt;
-            }
 
             let retryFresh = false;
 

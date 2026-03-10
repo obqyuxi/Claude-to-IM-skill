@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 CTI_HOME="${CTI_HOME:-$HOME/.claude-to-im}"
-SKILL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=lib/common.sh
+source "$(dirname "$0")/lib/common.sh"
+SKILL_DIR="$(resolve_skill_dir)"
 PID_FILE="$CTI_HOME/runtime/bridge.pid"
 STATUS_FILE="$CTI_HOME/runtime/status.json"
 LOG_FILE="$CTI_HOME/logs/bridge.log"
@@ -32,7 +34,7 @@ clean_env() {
   unset CLAUDECODE 2>/dev/null || true
 
   local runtime
-  runtime=$(grep "^CTI_RUNTIME=" "$CTI_HOME/config.env" 2>/dev/null | head -1 | cut -d= -f2- | tr -d "'" | tr -d '"' || true)
+  runtime=$(get_config_value "CTI_RUNTIME")
   runtime="${runtime:-claude}"
 
   local mode="${CTI_ENV_ISOLATION:-strict}"
@@ -69,8 +71,7 @@ read_pid() {
 }
 
 pid_alive() {
-  local pid="$1"
-  [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
+  check_pid_alive "$1"
 }
 
 status_running() {
@@ -104,10 +105,8 @@ case "$(uname -s)" in
     source "$SKILL_DIR/scripts/supervisor-macos.sh"
     ;;
   MINGW*|MSYS*|CYGWIN*)
-    # Windows detected via Git Bash / MSYS2 / Cygwin — delegate to PowerShell
-    echo "Windows detected. Delegating to supervisor-windows.ps1..."
-    powershell.exe -ExecutionPolicy Bypass -File "$SKILL_DIR/scripts/supervisor-windows.ps1" "$@"
-    exit $?
+    echo "Error: Windows is not supported. Use WSL (Windows Subsystem for Linux) instead."
+    exit 1
     ;;
   *)
     # shellcheck source=supervisor-linux.sh

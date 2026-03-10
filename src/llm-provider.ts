@@ -30,6 +30,44 @@ const ENV_WHITELIST = new Set([
 /** Prefixes that are always stripped (even in inherit mode). */
 const ENV_ALWAYS_STRIP = ['CLAUDECODE'];
 
+/** Inherit mode: pass everything except always-stripped vars. */
+function buildInheritModeEnv(): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(process.env)) {
+    if (v === undefined) continue;
+    if (ENV_ALWAYS_STRIP.includes(k)) continue;
+    out[k] = v;
+  }
+  return out;
+}
+
+/** Strict mode: only whitelist + CTI_* + conditional ANTHROPIC_*/OPENAI_*/CODEX_*. */
+function buildStrictModeEnv(): Record<string, string> {
+  const out: Record<string, string> = {};
+
+  for (const [k, v] of Object.entries(process.env)) {
+    if (v === undefined) continue;
+    if (ENV_WHITELIST.has(k) || k.startsWith('CTI_')) out[k] = v;
+  }
+
+  // ANTHROPIC_* only if CTI_ANTHROPIC_PASSTHROUGH is explicitly set
+  if (process.env.CTI_ANTHROPIC_PASSTHROUGH === 'true') {
+    for (const [k, v] of Object.entries(process.env)) {
+      if (v !== undefined && k.startsWith('ANTHROPIC_')) out[k] = v;
+    }
+  }
+
+  // In codex/auto mode, pass through OPENAI_* / CODEX_* env vars
+  const runtime = process.env.CTI_RUNTIME || 'claude';
+  if (runtime === 'codex' || runtime === 'auto') {
+    for (const [k, v] of Object.entries(process.env)) {
+      if (v !== undefined && (k.startsWith('OPENAI_') || k.startsWith('CODEX_'))) out[k] = v;
+    }
+  }
+
+  return out;
+}
+
 /**
  * Build a clean env for the CLI subprocess.
  *
@@ -39,41 +77,7 @@ const ENV_ALWAYS_STRIP = ['CLAUDECODE'];
  */
 export function buildSubprocessEnv(): Record<string, string> {
   const mode = process.env.CTI_ENV_ISOLATION || 'strict';
-  const out: Record<string, string> = {};
-
-  if (mode === 'inherit') {
-    // Pass everything except always-stripped vars
-    for (const [k, v] of Object.entries(process.env)) {
-      if (v === undefined) continue;
-      if (ENV_ALWAYS_STRIP.includes(k)) continue;
-      out[k] = v;
-    }
-  } else {
-    // Strict: whitelist only
-    for (const [k, v] of Object.entries(process.env)) {
-      if (v === undefined) continue;
-      if (ENV_WHITELIST.has(k)) { out[k] = v; continue; }
-      // Pass through CTI_* so skill config is available
-      if (k.startsWith('CTI_')) { out[k] = v; continue; }
-    }
-    // ANTHROPIC_* should come from config.env, not parent process.
-    // Only pass them if CTI_ANTHROPIC_PASSTHROUGH is explicitly set.
-    if (process.env.CTI_ANTHROPIC_PASSTHROUGH === 'true') {
-      for (const [k, v] of Object.entries(process.env)) {
-        if (v !== undefined && k.startsWith('ANTHROPIC_')) out[k] = v;
-      }
-    }
-
-    // In codex/auto mode, pass through OPENAI_* / CODEX_* env vars
-    const runtime = process.env.CTI_RUNTIME || 'claude';
-    if (runtime === 'codex' || runtime === 'auto') {
-      for (const [k, v] of Object.entries(process.env)) {
-        if (v !== undefined && (k.startsWith('OPENAI_') || k.startsWith('CODEX_'))) out[k] = v;
-      }
-    }
-  }
-
-  return out;
+  return mode === 'inherit' ? buildInheritModeEnv() : buildStrictModeEnv();
 }
 
 // ── Claude CLI path resolution ──

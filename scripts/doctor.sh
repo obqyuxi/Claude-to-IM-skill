@@ -4,6 +4,9 @@ CTI_HOME="$HOME/.claude-to-im"
 CONFIG_FILE="$CTI_HOME/config.env"
 PID_FILE="$CTI_HOME/runtime/bridge.pid"
 LOG_FILE="$CTI_HOME/logs/bridge.log"
+# shellcheck source=lib/common.sh
+source "$(dirname "$0")/lib/common.sh"
+SKILL_DIR="$(resolve_skill_dir)"
 
 PASS=0
 FAIL=0
@@ -33,8 +36,7 @@ else
 fi
 
 # --- Read runtime setting ---
-SKILL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-CTI_RUNTIME=$(grep "^CTI_RUNTIME=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d= -f2- | tr -d "'" | tr -d '"')
+CTI_RUNTIME=$(get_config_value "CTI_RUNTIME")
 CTI_RUNTIME="${CTI_RUNTIME:-claude}"
 echo "Runtime: $CTI_RUNTIME"
 echo ""
@@ -143,12 +145,11 @@ if [ -f "$CONFIG_FILE" ]; then
 fi
 
 # --- Load config for channel checks ---
-get_config() { grep "^$1=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d= -f2- | sed 's/^["'"'"']//;s/["'"'"']$//'; }
 
 if [ -f "$CONFIG_FILE" ]; then
-  CTI_CHANNELS=$(get_config CTI_ENABLED_CHANNELS)
-  CTI_DEFAULT_WORKDIR=$(get_config CTI_DEFAULT_WORKDIR)
-  CTI_CODEX_SKIP_GIT_REPO_CHECK=$(get_config CTI_CODEX_SKIP_GIT_REPO_CHECK)
+  CTI_CHANNELS=$(get_config_value CTI_ENABLED_CHANNELS)
+  CTI_DEFAULT_WORKDIR=$(get_config_value CTI_DEFAULT_WORKDIR)
+  CTI_CODEX_SKIP_GIT_REPO_CHECK=$(get_config_value CTI_CODEX_SKIP_GIT_REPO_CHECK)
 
   if [ "$CTI_RUNTIME" = "codex" ] || [ "$CTI_RUNTIME" = "auto" ]; then
     if [ -n "$CTI_DEFAULT_WORKDIR" ]; then
@@ -173,7 +174,7 @@ if [ -f "$CONFIG_FILE" ]; then
 
   # --- Telegram ---
   if echo "$CTI_CHANNELS" | grep -q telegram; then
-    TG_TOKEN=$(get_config CTI_TG_BOT_TOKEN)
+    TG_TOKEN=$(get_config_value CTI_TG_BOT_TOKEN)
     if [ -n "$TG_TOKEN" ]; then
       TG_RESULT=$(curl -s --max-time 5 "https://api.telegram.org/bot${TG_TOKEN}/getMe" 2>/dev/null || echo '{"ok":false}')
       if echo "$TG_RESULT" | grep -q '"ok":true'; then
@@ -188,9 +189,9 @@ if [ -f "$CONFIG_FILE" ]; then
 
   # --- Feishu ---
   if echo "$CTI_CHANNELS" | grep -q feishu; then
-    FS_APP_ID=$(get_config CTI_FEISHU_APP_ID)
-    FS_SECRET=$(get_config CTI_FEISHU_APP_SECRET)
-    FS_DOMAIN=$(get_config CTI_FEISHU_DOMAIN)
+    FS_APP_ID=$(get_config_value CTI_FEISHU_APP_ID)
+    FS_SECRET=$(get_config_value CTI_FEISHU_APP_SECRET)
+    FS_DOMAIN=$(get_config_value CTI_FEISHU_DOMAIN)
     FS_DOMAIN="${FS_DOMAIN:-https://open.feishu.cn}"
     if [ -n "$FS_APP_ID" ] && [ -n "$FS_SECRET" ]; then
       FEISHU_RESULT=$(curl -s --max-time 5 -X POST "${FS_DOMAIN}/open-apis/auth/v3/tenant_access_token/internal" \
@@ -208,8 +209,8 @@ if [ -f "$CONFIG_FILE" ]; then
 
   # --- QQ ---
   if echo "$CTI_CHANNELS" | grep -q qq; then
-    QQ_APP_ID=$(get_config CTI_QQ_APP_ID)
-    QQ_APP_SECRET=$(get_config CTI_QQ_APP_SECRET)
+    QQ_APP_ID=$(get_config_value CTI_QQ_APP_ID)
+    QQ_APP_SECRET=$(get_config_value CTI_QQ_APP_SECRET)
     if [ -n "$QQ_APP_ID" ] && [ -n "$QQ_APP_SECRET" ]; then
       QQ_TOKEN_RESULT=$(curl -s --max-time 10 -X POST "https://bots.qq.com/app/getAppAccessToken" \
         -H "Content-Type: application/json" \
@@ -235,8 +236,8 @@ if [ -f "$CONFIG_FILE" ]; then
 
   # --- WeCom ---
   if echo "$CTI_CHANNELS" | grep -q wecom; then
-    WECOM_BOT_ID=$(get_config CTI_WECOM_BOT_ID)
-    WECOM_SECRET=$(get_config CTI_WECOM_SECRET)
+    WECOM_BOT_ID=$(get_config_value CTI_WECOM_BOT_ID)
+    WECOM_SECRET=$(get_config_value CTI_WECOM_SECRET)
     if [ -d "$SKILL_DIR/node_modules/@wecom/aibot-node-sdk" ]; then
       check "@wecom/aibot-node-sdk installed" 0
     else
@@ -251,7 +252,7 @@ if [ -f "$CONFIG_FILE" ]; then
 
   # --- Discord ---
   if echo "$CTI_CHANNELS" | grep -q discord; then
-    DC_TOKEN=$(get_config CTI_DISCORD_BOT_TOKEN)
+    DC_TOKEN=$(get_config_value CTI_DISCORD_BOT_TOKEN)
     if [ -n "$DC_TOKEN" ]; then
       if echo "${DC_TOKEN}" | grep -qE '^[A-Za-z0-9_-]{20,}\.'; then
         check "Discord bot token format" 0
@@ -275,7 +276,7 @@ fi
 # --- PID file consistency ---
 if [ -f "$PID_FILE" ]; then
   PID=$(cat "$PID_FILE")
-  if kill -0 "$PID" 2>/dev/null; then
+  if check_pid_alive "$PID"; then
     check "PID file consistent (process $PID is running)" 0
   else
     check "PID file consistent (stale PID $PID, process not running)" 1

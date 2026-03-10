@@ -85,6 +85,29 @@ Shows recent log output from the daemon.
 
 Logs are stored in `~/.claude-to-im/logs/` and are automatically redacted to mask secrets.
 
+## mobile
+
+Links the current Claude Code / Codex session to an existing IM chat so you can continue the conversation on your phone.
+
+```
+/claude-to-im mobile              # Interactive selection (Claude Code)
+/claude-to-im mobile 1            # Connect to candidate #1
+/claude-to-im mobile wecom:chatid # Connect to specific chat
+/claude-to-im mobile 1 --force    # Overwrite existing binding
+```
+
+**Prerequisites:**
+- Bridge daemon must be running
+- Target chat must have sent at least one message to the bot
+
+**Workflow:**
+1. Send a message from your phone to the bot
+2. Run `/claude-to-im mobile` in Claude Code
+3. Select the chat from the list
+4. Continue the conversation on your phone
+
+The command will send a confirmation message to the IM chat when successfully connected.
+
 ## reconfigure
 
 Interactively update the current configuration.

@@ -91,7 +91,7 @@ For each enabled channel, read `SKILL_DIR/references/setup-guides.md` and presen
 
 - **Telegram**: Bot Token → confirm (masked) → Chat ID (see guide for how to get it) → confirm → Allowed User IDs (optional). **Important:** At least one of Chat ID or Allowed User IDs must be set, otherwise the bot will reject all messages.
 - **Discord**: Bot Token → confirm (masked) → Allowed User IDs → Allowed Channel IDs (optional) → Allowed Guild IDs (optional). **Important:** At least one of Allowed User IDs or Allowed Channel IDs must be set, otherwise the bot will reject all messages (default-deny).
-- **Feishu**: App ID → confirm → App Secret → confirm (masked) → Domain (optional) → Allowed User IDs (optional). Guide through all 4 steps (A: batch permissions, B: enable bot, C: events & callbacks with long connection, D: publish version).
+- **Feishu**: App ID → confirm → App Secret → confirm (masked) → Domain (optional) → Allowed User IDs (optional). Guide through all 4 steps (A: batch permissions, B: enable bot, C: events & callbacks with long connection, D: publish version). **Important:** The bot will NOT respond to messages until the app version is approved and published in the Feishu Admin Console.
 - **WeCom**: Collect the required bot fields, then optional access controls:
   1. WeCom Bot ID (required) → confirm
   2. WeCom Secret (required) → confirm (masked)
@@ -207,5 +207,5 @@ For more complex issues (messages not received, permission timeouts, high memory
 
 - Always mask secrets in output (show only last 4 characters) — users often share terminal output in bug reports, so exposed tokens would be a security incident.
 - Always check for config.env before starting the daemon — without it the process crashes on startup and leaves a stale PID file that blocks future starts (requiring manual cleanup).
-- The daemon runs as a background Node.js process managed by platform supervisor (launchd on macOS, setsid on Linux, WinSW/NSSM on Windows).
+- The daemon runs as a background Node.js process managed by platform supervisor (launchd on macOS, setsid on Linux). Windows is not supported — use WSL instead.
 - Config persists at `~/.claude-to-im/config.env` — survives across sessions.

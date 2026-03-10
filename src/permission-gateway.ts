@@ -1,3 +1,5 @@
+import { PERMISSION_TIMEOUT_MS } from './constants.js';
+
 export interface PermissionResult {
   behavior: 'allow' | 'deny';
   message?: string;
@@ -13,7 +15,7 @@ export class PendingPermissions {
     resolve: (r: PermissionResult) => void;
     timer: NodeJS.Timeout;
   }>();
-  private timeoutMs = 5 * 60 * 1000; // 5 minutes
+  private timeoutMs = PERMISSION_TIMEOUT_MS;
 
   waitFor(toolUseID: string): Promise<PermissionResult> {
     return new Promise((resolve) => {

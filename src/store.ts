@@ -5,7 +5,6 @@
  * to JSON files in ~/.claude-to-im/data/.
  */
 
-import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import type {
@@ -21,6 +20,8 @@ import type {
 } from 'claude-to-im/src/lib/bridge/host.js';
 import type { ChannelBinding, ChannelType } from 'claude-to-im/src/lib/bridge/types.js';
 import { CTI_HOME } from './config.js';
+import { AUDIT_LOG_MAX, DEDUP_WINDOW_MS } from './constants.js';
+import { ensureDir, atomicWrite, readJson, writeJson } from './utils/file-io.js';
 
 const DATA_DIR = path.join(CTI_HOME, 'data');
 const MESSAGES_DIR = path.join(DATA_DIR, 'messages');
@@ -46,29 +47,6 @@ export interface UpsertRuntimeSessionBindingInput {
 }
 
 // ── Helpers ──
-
-function ensureDir(dir: string): void {
-  fs.mkdirSync(dir, { recursive: true });
-}
-
-function atomicWrite(filePath: string, data: string): void {
-  const tmp = filePath + '.tmp';
-  fs.writeFileSync(tmp, data, 'utf-8');
-  fs.renameSync(tmp, filePath);
-}
-
-function readJson<T>(filePath: string, fallback: T): T {
-  try {
-    const raw = fs.readFileSync(filePath, 'utf-8');
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
-}
-
-function writeJson(filePath: string, data: unknown): void {
-  atomicWrite(filePath, JSON.stringify(data, null, 2));
-}
 
 function uuid(): string {
   return crypto.randomUUID();
@@ -239,7 +217,7 @@ export class JsonFileStore implements BridgeStore {
 
   // ── Channel Bindings ──
 
-  getChannelBinding(channelType: string, chatId: string): ChannelBinding | null {
+  getChannelBinding(channelType: ChannelType, chatId: string): ChannelBinding | null {
     return this.bindings.get(`${channelType}:${chatId}`) ?? null;
   }
 
@@ -454,9 +432,9 @@ export class JsonFileStore implements BridgeStore {
       id: uuid(),
       createdAt: now(),
     });
-    // Ring buffer: keep last 1000
-    if (this.auditLog.length > 1000) {
-      this.auditLog = this.auditLog.slice(-1000);
+    // Ring buffer: keep last AUDIT_LOG_MAX
+    if (this.auditLog.length > AUDIT_LOG_MAX) {
+      this.auditLog = this.auditLog.slice(-AUDIT_LOG_MAX);
     }
     this.persistAudit();
   }
@@ -464,8 +442,7 @@ export class JsonFileStore implements BridgeStore {
   checkDedup(key: string): boolean {
     const ts = this.dedupKeys.get(key);
     if (ts === undefined) return false;
-    // 5 minute window
-    if (Date.now() - ts > 5 * 60 * 1000) {
+    if (Date.now() - ts > DEDUP_WINDOW_MS) {
       this.dedupKeys.delete(key);
       return false;
     }
@@ -478,7 +455,7 @@ export class JsonFileStore implements BridgeStore {
   }
 
   cleanupExpiredDedup(): void {
-    const cutoff = Date.now() - 5 * 60 * 1000;
+    const cutoff = Date.now() - DEDUP_WINDOW_MS;
     let changed = false;
     for (const [key, ts] of this.dedupKeys) {
       if (ts < cutoff) {

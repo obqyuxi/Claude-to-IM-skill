@@ -1,10 +1,21 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import type { ChannelType } from './constants.js';
+import { splitCsv } from './utils/csv.js';
+
+// Re-export for backward compatibility
+export { maskSecret } from './utils/secrets.js';
+
+/** splitCsv variant that returns undefined instead of [] for optional config fields. */
+function splitCsvOptional(value: string | undefined): string[] | undefined {
+  const result = splitCsv(value);
+  return result.length > 0 ? result : undefined;
+}
 
 export interface Config {
   runtime: 'claude' | 'codex' | 'auto';
-  enabledChannels: string[];
+  enabledChannels: ChannelType[];
   defaultWorkDir: string;
   defaultModel?: string;
   defaultMode: string;
@@ -64,13 +75,6 @@ function parseEnvFile(content: string): Map<string, string> {
   return entries;
 }
 
-function splitCsv(value: string | undefined): string[] | undefined {
-  if (!value) return undefined;
-  return value
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
 
 export function loadConfig(): Config {
   let env = new Map<string, string>();
@@ -86,27 +90,27 @@ export function loadConfig(): Config {
 
   return {
     runtime,
-    enabledChannels: splitCsv(env.get("CTI_ENABLED_CHANNELS")) ?? [],
+    enabledChannels: splitCsv(env.get("CTI_ENABLED_CHANNELS")) as ChannelType[],
     defaultWorkDir: env.get("CTI_DEFAULT_WORKDIR") || process.cwd(),
     defaultModel: env.get("CTI_DEFAULT_MODEL") || undefined,
     defaultMode: env.get("CTI_DEFAULT_MODE") || "code",
     codexSkipGitRepoCheck: env.get("CTI_CODEX_SKIP_GIT_REPO_CHECK") === "true",
     tgBotToken: env.get("CTI_TG_BOT_TOKEN") || undefined,
     tgChatId: env.get("CTI_TG_CHAT_ID") || undefined,
-    tgAllowedUsers: splitCsv(env.get("CTI_TG_ALLOWED_USERS")),
+    tgAllowedUsers: splitCsvOptional(env.get("CTI_TG_ALLOWED_USERS")),
     feishuAppId: env.get("CTI_FEISHU_APP_ID") || undefined,
     feishuAppSecret: env.get("CTI_FEISHU_APP_SECRET") || undefined,
     feishuDomain: env.get("CTI_FEISHU_DOMAIN") || undefined,
-    feishuAllowedUsers: splitCsv(env.get("CTI_FEISHU_ALLOWED_USERS")),
+    feishuAllowedUsers: splitCsvOptional(env.get("CTI_FEISHU_ALLOWED_USERS")),
     discordBotToken: env.get("CTI_DISCORD_BOT_TOKEN") || undefined,
-    discordAllowedUsers: splitCsv(env.get("CTI_DISCORD_ALLOWED_USERS")),
-    discordAllowedChannels: splitCsv(
+    discordAllowedUsers: splitCsvOptional(env.get("CTI_DISCORD_ALLOWED_USERS")),
+    discordAllowedChannels: splitCsvOptional(
       env.get("CTI_DISCORD_ALLOWED_CHANNELS")
     ),
-    discordAllowedGuilds: splitCsv(env.get("CTI_DISCORD_ALLOWED_GUILDS")),
+    discordAllowedGuilds: splitCsvOptional(env.get("CTI_DISCORD_ALLOWED_GUILDS")),
     qqAppId: env.get("CTI_QQ_APP_ID") || undefined,
     qqAppSecret: env.get("CTI_QQ_APP_SECRET") || undefined,
-    qqAllowedUsers: splitCsv(env.get("CTI_QQ_ALLOWED_USERS")),
+    qqAllowedUsers: splitCsvOptional(env.get("CTI_QQ_ALLOWED_USERS")),
     qqImageEnabled: env.has("CTI_QQ_IMAGE_ENABLED")
       ? env.get("CTI_QQ_IMAGE_ENABLED") === "true"
       : undefined,
@@ -115,9 +119,9 @@ export function loadConfig(): Config {
       : undefined,
     wecomBotId: env.get("CTI_WECOM_BOT_ID") || undefined,
     wecomSecret: env.get("CTI_WECOM_SECRET") || undefined,
-    wecomAllowedUsers: splitCsv(env.get("CTI_WECOM_ALLOWED_USERS")),
+    wecomAllowedUsers: splitCsvOptional(env.get("CTI_WECOM_ALLOWED_USERS")),
     wecomGroupPolicy: (env.get("CTI_WECOM_GROUP_POLICY") || undefined) as Config["wecomGroupPolicy"],
-    wecomGroupAllowFrom: splitCsv(env.get("CTI_WECOM_GROUP_ALLOW_FROM")),
+    wecomGroupAllowFrom: splitCsvOptional(env.get("CTI_WECOM_GROUP_ALLOW_FROM")),
     wecomWsUrl: env.get("CTI_WECOM_WS_URL") || undefined,
     autoApprove: env.get("CTI_AUTO_APPROVE") === "true",
   };
@@ -194,11 +198,6 @@ export function saveConfig(config: Config): void {
   const tmpPath = CONFIG_PATH + ".tmp";
   fs.writeFileSync(tmpPath, out, { mode: 0o600 });
   fs.renameSync(tmpPath, CONFIG_PATH);
-}
-
-export function maskSecret(value: string): string {
-  if (value.length <= 4) return "****";
-  return "*".repeat(value.length - 4) + value.slice(-4);
 }
 
 export function configToSettings(config: Config): Map<string, string> {
